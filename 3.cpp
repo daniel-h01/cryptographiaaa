@@ -17,6 +17,7 @@ using namespace std;
 
 using Number = unsigned long long;
 
+Number p;
 
 const long double PI = std::acos(-1.0L);
 
@@ -542,7 +543,7 @@ Number char_to_number(char symbol) {
 }
 
 class Polynomial {
-private:
+public:
     std::vector<Number> data;
 
     void del_zeros() {
@@ -552,7 +553,6 @@ private:
         data.resize(i + 1);
     }
 
-public:
     // =================CONSTRUCTOR==================
 
     Polynomial(const std::vector<Number> v) : data(v) {
@@ -588,6 +588,14 @@ public:
         return data.cend();
     }
 
+
+    Number operator[] (const size_t i) const {
+    if (i >= size()) {
+        return 0;
+    }
+    return data[i];
+    }
+
     // ==================PRODUCT=====================
 
     Polynomial& operator *= (const Polynomial& other) {
@@ -596,7 +604,8 @@ public:
         data.resize(temp.size() + other.size());
         for (size_t i = 0; i != temp.size(); ++i) {
             for (size_t j = 0; j != other.size(); ++j) {
-                data[i + j] += temp[i] * other[j];
+                data[i + j] = data[i + j] + temp[i] * other[j] % p;
+                data[i + j] = data [i + j] % p;
             }
         }
         del_zeros();
@@ -611,6 +620,21 @@ Polynomial operator* (const Polynomial& lhs_, const Polynomial& rhs) {
     return lhs *= rhs;
 }
 
+Polynomial pow(Polynomial& a_, Number n) {
+    vector<Number> temp = {1};
+    Polynomial res(temp);
+    Polynomial a(a_);
+    while (n > 0) {
+        if (n % 2 != 0)
+        {
+            res = res * a;
+        }
+        a = a * a;
+        n /= 2;
+    }
+    return res;
+}
+
 
 class Z_p
 {
@@ -623,15 +647,6 @@ public:
     {
         return {this->a * rhs.a % p, p};
     }
-
-    Z_p inverse()
-    {
-        int x, y;
-        gcdex (a, p, x, y);
-        x = (x % p + p) % p;
-        return {x, p};
-    }
-
 };
 
 Z_p pow(Z_p a, Number n) {
@@ -646,6 +661,7 @@ Z_p pow(Z_p a, Number n) {
     }
     return res;
 }
+
 
 void transformBase(vector<unsigned long long> &num, unsigned long long p, vector<unsigned long long> &ans)
 {
@@ -662,14 +678,82 @@ void transformBase(vector<unsigned long long> &num, unsigned long long p, vector
     }
 }
 
-intint main(){
-    //test
+void normalize(Polynomial& f)
+{
+    auto last = f[f.size() - 1];
+    if (last == 1)
+    {
+        return;
+    }
+    else
+    {
+        Z_p inv = {last, p};
+        Z_p inv_zp = pow(inv, p - 2);
+        for (Number& x : f.data)
+        {
+            x = x * inv_zp.a % p;
+        }
+    }
+}
 
-    //end test
-    unsigned long long p, g, k;
-    cin >> p >> g >> k;
+Polynomial input_poly()
+{
+    string s;
+    getline(cin, s);
+    vector<Number> f;
+    string number;
+    for (auto c : s)
+    {
+        if (c == ' ')
+        {
+            int x = stoll(number);
+            if (x < 0)
+            {
+                x += p;
+            }
+            f.push_back(x);
+            number.clear();
+        }
+        else
+        {
+            number.push_back(c);
+        }
+    }
+    if (!number.empty())
+    {
+        int x = stoll(number);
+        if (x < 0)
+        {
+            x += p;
+        }
+        f.push_back(x);
+        number.clear();
+    }
+    Polynomial ret(f);
+    return ret;
+}
+
+void mod_poly(Polynomial& g, Polynomial& f)
+{
+    while(g.size() > f.size() - 1)
+    {
+        for (int i = 0; i < f.size() - 1; ++i) {
+            g.data[g.size() - i - 2] += p - f[f.size() - i - 2] * g[g.size() - 1] % p;
+            g.data[g.size() - i - 2] %= p;
+      }
+      g.data.pop_back();
+    }
+}
+
+intint main(){
+    cin >> p;
     string str;
     getline(cin, str);
+    Polynomial f = input_poly();
+    normalize(f);
+    Polynomial g = input_poly();
+    Polynomial k = input_poly();
+
     getline(cin, str);
     vector<unsigned long long> num;
     for (char c : str)
@@ -678,18 +762,48 @@ intint main(){
     }
     vector<unsigned long long> ans;
     transformBase(num, p, ans);
-    Z_p f_k(k, p);
-    Z_p f_g(g, p);
-    for (auto h : ans)
+
+    Number n = f.size() - 1;
+    vector<vector<Number>> splited;
+    vector<Number> temp;
+    for (Number x : ans)
     {
-        Z_p f_h(h, p);
-        unsigned long long b = rand() % (p - 1) + 1; // should be random
-        Z_p first(k, p);
-        first = pow(first, b);
-        first = first * f_h;
-        Z_p second(g, p);
-        second = pow(second, b);
-        cout << second.a << ' ' << first.a << '\n';
+        temp.push_back(x);
+        if (temp.size() == n)
+        {
+            splited.push_back(temp);
+            temp.clear();
+        }
+    }
+    if (!temp.empty())
+    {
+        splited.push_back(temp);
+    }
+
+    for (auto &item : splited)
+    {
+        Polynomial pol(item);
+        mod_poly(pol, f);
+        Number b = 10; // random
+        Polynomial g_b = pow(g, b);
+        mod_poly(g_b, f);
+
+        for (int i = 0; i < g_b.size(); ++i)
+        {
+            cout << g_b[i] << ' ';
+        }
+        cout << '\n';
+
+        Polynomial g_ab = pow(k, b);
+        mod_poly(g_ab, f);
+        Polynomial r = pol * g_ab;
+        mod_poly(r, f);
+
+        for (size_t i = 0; i < r.size(); ++i)
+        {
+            cout << r[i] << ' ';
+        }
+        cout << '\n';
     }
     return 0;
 }
